@@ -36,7 +36,7 @@ async def complaint(message: Message):
     text = message.text or "<нет текста>"
     # пересылаем админам: только текст, без раскрытия пользователя
     try:
-        await bot.send_message(ADMIN_CHAT_ID, f"⚠️ Новая анонимная жалоба:\n\n{text}")
+        await bot.send_message(ADMIN_CHAT_ID, f"⚠️ Юху! Кто-то настучал!:\n\n{text}")
         await message.answer("✅ Информация отправлена! Имейте в виду - у всех ребят сейчас огромное колличество работы, не все вопросы можно решить сразу и по-щелчку пальцев. Но все виновные будут наказаны. Вор будет сидеть в тюрьме. Быть добру!")
     except Exception as e:
         # логирование (в Render видно в логах)
