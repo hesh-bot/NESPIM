@@ -65,7 +65,7 @@ def run_http():
     app.run(host="0.0.0.0", port=port)
 
 # ---------- Точка входа ----------
-if name == "__main__":
+if __name__ == "__main__":
     # Запускаем Flask в отдельном потоке — чтобы binding порта происходил в процессе
     threading.Thread(target=run_http, daemon=True).start()
 
