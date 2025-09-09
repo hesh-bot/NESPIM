@@ -1,42 +1,73 @@
+# app.py
+# Telegram anonymous complaints bot (aiogram v3) + Flask (Render friendly)
 import os
+import asyncio
 import threading
-import logging
 from flask import Flask
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from aiogram import Bot, Dispatcher
+from aiogram.filters import CommandStart
+from aiogram.types import Message
 
-# ----- Config -----
+# ---------- Конфигурация (из переменных окружения) ----------
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
-    raise RuntimeError("Environment variable TELEGRAM_TOKEN is not set")
+    raise RuntimeError("TELEGRAM_TOKEN не задан. Установите в Render Environment.")
 
-logging.basicConfig(level=logging.INFO)
+ADMIN_CHAT = os.environ.get("ADMIN_CHAT_ID")
+if not ADMIN_CHAT:
+    raise RuntimeError("ADMIN_CHAT_ID не задан. Установите в Render Environment.")
+ADMIN_CHAT_ID = int(ADMIN_CHAT)  # пример: -1001234567890 для канала/чата
 
-# ----- Telegram Bot -----
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот работает ✅")
+# ---------- Инициализация aiogram ----------
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-def run_bot():
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start_cmd))
-    # polling is blocking -> run it in a background thread
-    application.run_polling()
+# ---------- Хендлеры (перенеси сюда свою логику) ----------
+@dp.message(CommandStart())
+async def start(message: Message):
+    await message.answer(
+        "Максимально подробно опишите проблему. Чем больше информации - тем быстрее "
+        "отработают соответствующие органы! Отправьте жалобу, и я полностью передам её "
+        "анонимно администраторам. Можно оставить контакты для связи."
+    )
 
-# Start bot in a background thread
-threading.Thread(target=run_bot, daemon=True).start()
+@dp.message()
+async def complaint(message: Message):
+    text = message.text or "<нет текста>"
+    # пересылаем админам: только текст, без раскрытия пользователя
+    try:
+        await bot.send_message(ADMIN_CHAT_ID, f"⚠️ Новая анонимная жалоба:\n\n{text}")
+        await message.answer("✅ Жалоба отправлена!")
+    except Exception as e:
+        # логирование (в Render видно в логах)
+        print("Ошибка при отправке в админ-чат:", e)
+        await message.answer("❗️ Не удалось отправить жалобу — попробуйте позже.")
 
-# ----- Minimal Flask web server (Render requires an open PORT) -----
-web = Flask(__name__)
+# ---------- Функция запуска polling (async) ----------
+async def run_bot():
+    # Запускаем polling (он блокирует текущий asyncio loop)
+    await dp.start_polling(bot)
 
-@web.route("/")
-def root():
-    return "Bot is running", 200
+# ---------- Небольшой HTTP-сервер для Render (чтобы был открыт порт) ----------
+def run_http():
+    app = Flask(__name__)
 
-@web.route("/health")
-def health():
-    return "OK", 200
+    @app.route("/")
+    def root():
+        return "Bot is running", 200
 
-if __name__ == "__main__":
+    @app.route("/health")
+    def health():
+        return "OK", 200
+
     port = int(os.environ.get("PORT", "5000"))
-    # Render requires binding to 0.0.0.0 and the provided $PORT
-    web.run(host="0.0.0.0", port=port)
+    # Render требует 0.0.0.0 и порт из $PORT
+    app.run(host="0.0.0.0", port=port)
+
+# ---------- Точка входа ----------
+if name == "__main__":
+    # Запускаем Flask в отдельном потоке — чтобы binding порта происходил в процессе
+    threading.Thread(target=run_http, daemon=True).start()
+
+    # Запускаем aiogram polling в основном потоке (asyncio)
+    asyncio.run(run_bot())
